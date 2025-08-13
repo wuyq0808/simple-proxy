@@ -48,7 +48,6 @@ jobs:
             --container-image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }} \
             --zone=us-central1-a \
             --machine-type=e2-micro \
-            --provisioning-model=SPOT \
             --tags=simple-proxy \
             --container-restart-policy=always \
             --boot-disk-size=20GB
