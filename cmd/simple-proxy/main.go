@@ -14,9 +14,20 @@ func main() {
 	cfg := config.Load()
 	p := proxy.New()
 
-	r := mux.NewRouter()
-	r.PathPrefix("/").HandlerFunc(p.ServeHTTP)
+	// Create a custom handler that handles CONNECT before mux routing
+	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Handle CONNECT method directly (bypass mux)
+		if req.Method == http.MethodConnect {
+			p.ServeHTTP(w, req)
+			return
+		}
+		
+		// For all other methods, use mux router
+		router := mux.NewRouter()
+		router.PathPrefix("/").HandlerFunc(p.ServeHTTP)
+		router.ServeHTTP(w, req)
+	})
 	
 	log.Printf("Server starting on port %s", cfg.Port)
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, r))
+	log.Fatal(http.ListenAndServe(":"+cfg.Port, handler))
 }
