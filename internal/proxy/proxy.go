@@ -17,7 +17,7 @@ func New() *Proxy {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	target, err := url.Parse(r.URL.String())
+	target, err := url.Parse("https://" + r.Host + r.URL.RequestURI())
 	if err != nil {
 		http.Error(w, "Invalid URL", http.StatusBadRequest)
 		return
@@ -25,8 +25,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
-			req.URL = target
+			req.URL.Scheme = target.Scheme
+			req.URL.Host = target.Host
+			req.URL.Path = target.Path
+			req.URL.RawQuery = target.RawQuery
 			req.Host = target.Host
+			req.Header["X-Forwarded-For"] = nil
 		},
 		Transport: p.transport,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
