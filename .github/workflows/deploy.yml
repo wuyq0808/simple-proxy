@@ -35,18 +35,24 @@ jobs:
         docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }} ./
         docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }}
 
-    - name: Create Container-Optimized OS Instance
+    - name: Deploy or Update Container Instance
       run: |-
-        gcloud compute instances create-with-container simple-proxy-cos \
-          --container-image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }} \
+        # Try to update existing instance first
+        if gcloud compute instances update-container simple-proxy-cos \
           --zone=us-central1-a \
-          --machine-type=e2-micro \
-          --provisioning-model=SPOT \
-          --tags=simple-proxy \
-          --container-restart-policy=always \
-          --container-stdin \
-          --container-tty \
-          --boot-disk-size=20GB || echo "Instance may already exist"
+          --container-image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }} 2>/dev/null; then
+          echo "Updated existing instance"
+        else
+          echo "Creating new instance"
+          gcloud compute instances create-with-container simple-proxy-cos \
+            --container-image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }} \
+            --zone=us-central1-a \
+            --machine-type=e2-micro \
+            --provisioning-model=SPOT \
+            --tags=simple-proxy \
+            --container-restart-policy=always \
+            --boot-disk-size=20GB
+        fi
 
     - name: Show Instance Info
       run: gcloud compute instances describe simple-proxy-cos --zone=us-central1-a --format="get(networkInterfaces[0].accessConfigs[0].natIP)"
