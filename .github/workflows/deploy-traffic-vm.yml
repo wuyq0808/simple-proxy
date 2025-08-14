@@ -43,7 +43,11 @@ jobs:
 
         # Update system
         apt-get update
-        apt-get install -y python3 python3-pip curl wget jq nodejs npm
+        apt-get install -y python3 python3-pip curl wget jq
+        
+        # Install Node.js 18.x (required for Claude Code CLI)
+        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+        apt-get install -y nodejs
 
         # Install mitmproxy
         pip3 install mitmproxy
@@ -51,6 +55,11 @@ jobs:
         # Install Claude Code CLI
         echo "Installing Claude Code CLI..."
         npm install -g @anthropic-ai/claude-code
+        
+        # Add npm global bin to PATH and create symlink
+        NPM_GLOBAL_BIN=$(npm config get prefix)/bin
+        echo "export PATH=\$PATH:$NPM_GLOBAL_BIN" >> /etc/profile
+        ln -sf $NPM_GLOBAL_BIN/claude /usr/local/bin/claude
         
         # Create traffic user
         useradd -m -s /bin/bash traffic
