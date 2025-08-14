@@ -43,17 +43,14 @@ jobs:
 
         # Update system
         apt-get update
-        apt-get install -y python3 python3-pip curl wget jq
+        apt-get install -y python3 python3-pip curl wget jq nodejs npm
 
         # Install mitmproxy
         pip3 install mitmproxy
 
-        # Install Claude CLI
-        echo "Installing Claude CLI..."
-        curl -fsSL https://raw.githubusercontent.com/anthropics/claude-cli/main/install.sh | bash
-        
-        # Make Claude available system-wide
-        ln -sf /root/.local/bin/claude /usr/local/bin/claude
+        # Install Claude Code CLI
+        echo "Installing Claude Code CLI..."
+        npm install -g @anthropic-ai/claude-code
         
         # Create traffic user
         useradd -m -s /bin/bash traffic
