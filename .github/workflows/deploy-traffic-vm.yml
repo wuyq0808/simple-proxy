@@ -48,6 +48,13 @@ jobs:
         # Install mitmproxy
         pip3 install mitmproxy
 
+        # Install Claude CLI
+        echo "Installing Claude CLI..."
+        curl -fsSL https://raw.githubusercontent.com/anthropics/claude-cli/main/install.sh | bash
+        
+        # Make Claude available system-wide
+        ln -sf /root/.local/bin/claude /usr/local/bin/claude
+        
         # Create traffic user
         useradd -m -s /bin/bash traffic
         
@@ -206,26 +213,6 @@ jobs:
         VM_NAME="${{ github.event.inputs.vm_name || 'traffic-vm' }}"
         echo "VM Details:"
         gcloud compute instances describe $VM_NAME --zone=${{ env.ZONE }} --format="table(name,status,machineType.basename(),networkInterfaces[0].accessConfigs[0].natIP:label=EXTERNAL_IP)"
-        
-        echo ""
-        echo "Connection Information:"
-        EXTERNAL_IP=$(gcloud compute instances describe $VM_NAME --zone=${{ env.ZONE }} --format="get(networkInterfaces[0].accessConfigs[0].natIP)")
-        echo "SSH: ssh -i ~/.ssh/gcp_key $USER@$EXTERNAL_IP"
-        echo ""
-        echo "Usage Instructions:"
-        echo "1. SSH into the VM: ssh $USER@$EXTERNAL_IP"
-        echo "2. Traffic proxy is already running! Make requests: curl http://example.com"
-        echo "3. View logs: tail -f /opt/traffic/logs/traffic.jsonl | jq ."
-        echo "4. Manual control: /opt/traffic/start-proxy.sh to restart, /opt/traffic/clear-iptables.sh to stop"
-        echo "5. Startup logs: tail -f /opt/traffic/logs/startup.log"
-        echo ""
-        echo "Files:"
-        echo "- Traffic logs: /opt/traffic/logs/traffic.jsonl"
-        echo "- CA certificate: /opt/traffic/certs/mitmproxy-ca-cert.pem"
-        echo "- iptables setup: /opt/traffic/setup-iptables.sh"
-        echo "- Clear iptables: /opt/traffic/clear-iptables.sh"
-        echo "- Cleanup logs: /opt/traffic/cleanup-logs.sh"
-        echo "- Startup script: /opt/traffic/start-proxy.sh"
 
     - name: Cleanup
       run: rm -f startup-script.sh
