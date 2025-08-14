@@ -38,21 +38,29 @@ jobs:
 
     - name: Deploy or Update Container Instance
       run: |-
-        # Try to update existing instance first
-        if gcloud compute instances update-container simple-proxy-cos \
-          --zone=us-central1-a \
-          --container-image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }} 2>/dev/null; then
-          echo "Updated existing instance"
-        else
-          echo "Creating new instance"
-          gcloud compute instances create-with-container simple-proxy-cos \
-            --container-image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }} \
-            --zone=us-central1-a \
-            --machine-type=e2-micro \
-            --tags=simple-proxy \
-            --container-restart-policy=always \
-            --boot-disk-size=20GB
+        # Always delete existing instance if it exists
+        if gcloud compute instances describe simple-proxy-cos --zone=us-central1-a >/dev/null 2>&1; then
+          echo "Deleting existing instance"
+          gcloud compute instances delete simple-proxy-cos --zone=us-central1-a --quiet
+          
+          # Wait for deletion to complete
+          echo "Waiting for deletion to complete..."
+          while gcloud compute instances describe simple-proxy-cos --zone=us-central1-a >/dev/null 2>&1; do
+            echo "Still deleting..."
+            sleep 5
+          done
+          echo "Instance deleted successfully"
         fi
+        
+        # Create new instance
+        echo "Creating new instance"
+        gcloud compute instances create-with-container simple-proxy-cos \
+          --container-image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }} \
+          --zone=us-central1-a \
+          --machine-type=e2-micro \
+          --tags=simple-proxy \
+          --container-restart-policy=always \
+          --boot-disk-size=20GB
 
     - name: Show Instance Info
       run: gcloud compute instances describe simple-proxy-cos --zone=us-central1-a --format="get(networkInterfaces[0].accessConfigs[0].natIP)"
