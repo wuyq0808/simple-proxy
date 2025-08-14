@@ -10,7 +10,7 @@ on:
       vm_name:
         description: 'Name for the Traffic VM'
         required: false
-        default: 'traffic-interceptor'
+        default: 'traffic-vm'
       machine_type:
         description: 'Machine type for the VM'
         required: false
@@ -100,9 +100,33 @@ jobs:
 
         chown traffic:traffic /opt/traffic/traffic_script.py
 
-        # Note: No automatic iptables rules - users will use proxy explicitly
-        # For transparent interception, users can manually configure iptables if needed
+        # Note: iptables rules will be set when starting mitmproxy
 
+        # Create iptables setup script
+        cat > /opt/traffic/setup-iptables.sh << 'IPTABLES_EOF'
+        #!/bin/bash
+        echo "Setting up iptables rules for transparent interception..."
+        # Exclude traffic user from redirection to prevent loops
+        sudo iptables -t nat -A OUTPUT -m owner --uid-owner traffic -j RETURN
+        # Redirect HTTP traffic to mitmproxy
+        sudo iptables -t nat -A OUTPUT -p tcp --dport 80 -j REDIRECT --to-port 8080
+        # Redirect HTTPS traffic to mitmproxy
+        sudo iptables -t nat -A OUTPUT -p tcp --dport 443 -j REDIRECT --to-port 8080
+        echo "iptables rules configured for transparent mode"
+        IPTABLES_EOF
+        
+        chmod +x /opt/traffic/setup-iptables.sh
+        
+        # Create cleanup script to clear iptables rules
+        cat > /opt/traffic/clear-iptables.sh << 'CLEANUP_EOF'
+        #!/bin/bash
+        echo "Clearing iptables OUTPUT rules..."
+        sudo iptables -t nat -F OUTPUT
+        echo "iptables OUTPUT rules cleared - traffic interception disabled"
+        CLEANUP_EOF
+        
+        chmod +x /opt/traffic/clear-iptables.sh
+        
         # Create startup helper script for manual use
         cat > /opt/traffic/start-proxy.sh << 'SCRIPT_EOF'
         #!/bin/bash
@@ -110,7 +134,7 @@ jobs:
         echo "Log file: /opt/traffic/logs/traffic.jsonl"
         echo "To stop: Press Ctrl+C"
         echo ""
-        sudo -u traffic mitmdump -s /opt/traffic/traffic_script.py --set confdir=/opt/traffic/certs --listen-port 8080
+        sudo -u traffic mitmdump -s /opt/traffic/traffic_script.py --set confdir=/opt/traffic/certs --listen-port 8080 --mode transparent
         SCRIPT_EOF
         
         chmod +x /opt/traffic/start-proxy.sh
@@ -135,7 +159,7 @@ jobs:
 
     - name: Create or Update Traffic VM
       run: |
-        VM_NAME="${{ github.event.inputs.vm_name || 'traffic-interceptor' }}"
+        VM_NAME="${{ github.event.inputs.vm_name || 'traffic-vm' }}"
         MACHINE_TYPE="${{ github.event.inputs.machine_type || 'e2-standard-2' }}"
         
         # Check if VM exists
@@ -176,7 +200,7 @@ jobs:
 
     - name: Get VM Information
       run: |
-        VM_NAME="${{ github.event.inputs.vm_name || 'traffic-interceptor' }}"
+        VM_NAME="${{ github.event.inputs.vm_name || 'traffic-vm' }}"
         echo "VM Details:"
         gcloud compute instances describe $VM_NAME --zone=${{ env.ZONE }} --format="table(name,status,machineType.basename(),networkInterfaces[0].accessConfigs[0].natIP:label=EXTERNAL_IP)"
         
@@ -187,14 +211,18 @@ jobs:
         echo ""
         echo "Usage Instructions:"
         echo "1. SSH into the VM: ssh $USER@$EXTERNAL_IP"
-        echo "2. Start traffic proxy: /opt/traffic/start-proxy.sh"
-        echo "3. Use proxy in another terminal: curl -x http://localhost:8080 http://example.com"
-        echo "4. View logs: tail -f /opt/traffic/logs/traffic.jsonl | jq ."
+        echo "2. Setup iptables (once): /opt/traffic/setup-iptables.sh"
+        echo "3. Start traffic proxy: /opt/traffic/start-proxy.sh"
+        echo "4. In another terminal, make requests (transparently intercepted): curl http://example.com"
+        echo "5. View logs: tail -f /opt/traffic/logs/traffic.jsonl | jq ."
+        echo "6. Stop proxy: Press Ctrl+C, then run /opt/traffic/clear-iptables.sh to clear rules"
         echo ""
         echo "Files:"
         echo "- Traffic logs: /opt/traffic/logs/traffic.jsonl"
         echo "- CA certificate: /opt/traffic/certs/mitmproxy-ca-cert.pem"
+        echo "- iptables setup: /opt/traffic/setup-iptables.sh"
         echo "- Startup script: /opt/traffic/start-proxy.sh"
+        echo "- Clear iptables: /opt/traffic/clear-iptables.sh"
 
     - name: Cleanup
       run: rm -f startup-script.sh
