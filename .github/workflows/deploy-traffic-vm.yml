@@ -43,7 +43,7 @@ jobs:
 
         # Update system
         apt-get update
-        apt-get install -y python3 python3-pip iptables-persistent curl wget
+        apt-get install -y python3 python3-pip curl wget jq
 
         # Install mitmproxy
         pip3 install mitmproxy
@@ -100,37 +100,20 @@ jobs:
 
         chown traffic:traffic /opt/traffic/traffic_script.py
 
-        # Set up iptables rules for traffic interception
-        # Redirect HTTP traffic to traffic proxy
-        iptables -t nat -A OUTPUT -p tcp --dport 80 -j REDIRECT --to-port 8080
-        # Redirect HTTPS traffic to traffic proxy
-        iptables -t nat -A OUTPUT -p tcp --dport 443 -j REDIRECT --to-port 8080
+        # Note: No automatic iptables rules - users will use proxy explicitly
+        # For transparent interception, users can manually configure iptables if needed
 
-        # Save iptables rules
-        iptables-save > /etc/iptables/rules.v4
-
-        # Create systemd service for traffic proxy
-        cat > /etc/systemd/system/trafficproxy.service << 'SERVICE_EOF'
-        [Unit]
-        Description=Traffic Proxy for Traffic Interception
-        After=network.target
-
-        [Service]
-        Type=simple
-        User=traffic
-        WorkingDirectory=/opt/traffic
-        ExecStart=/usr/local/bin/mitmdump -s /opt/traffic/traffic_script.py --set confdir=/opt/traffic/certs --listen-port 8080 --mode transparent
-        Restart=always
-        RestartSec=3
-
-        [Install]
-        WantedBy=multi-user.target
-        SERVICE_EOF
-
-        # Enable and start the service
-        systemctl daemon-reload
-        systemctl enable trafficproxy
-        systemctl start trafficproxy
+        # Create startup helper script for manual use
+        cat > /opt/traffic/start-proxy.sh << 'SCRIPT_EOF'
+        #!/bin/bash
+        echo "Starting traffic proxy on port 8080..."
+        echo "Log file: /opt/traffic/logs/traffic.jsonl"
+        echo "To stop: Press Ctrl+C"
+        echo ""
+        sudo -u traffic mitmdump -s /opt/traffic/traffic_script.py --set confdir=/opt/traffic/certs --listen-port 8080
+        SCRIPT_EOF
+        
+        chmod +x /opt/traffic/start-proxy.sh
 
         # Create log rotation for traffic logs
         cat > /etc/logrotate.d/traffic << 'LOGROTATE_EOF'
@@ -201,11 +184,17 @@ jobs:
         echo "Connection Information:"
         EXTERNAL_IP=$(gcloud compute instances describe $VM_NAME --zone=${{ env.ZONE }} --format="get(networkInterfaces[0].accessConfigs[0].natIP)")
         echo "SSH: ssh -i ~/.ssh/gcp_key $USER@$EXTERNAL_IP"
-        echo "Traffic logs: /opt/traffic/logs/traffic.jsonl"
-        echo "Traffic CA cert: /opt/traffic/certs/mitmproxy-ca-cert.pem"
         echo ""
-        echo "To view traffic logs in real-time:"
-        echo "tail -f /opt/traffic/logs/traffic.jsonl | jq ."
+        echo "Usage Instructions:"
+        echo "1. SSH into the VM: ssh $USER@$EXTERNAL_IP"
+        echo "2. Start traffic proxy: /opt/traffic/start-proxy.sh"
+        echo "3. Use proxy in another terminal: curl -x http://localhost:8080 http://example.com"
+        echo "4. View logs: tail -f /opt/traffic/logs/traffic.jsonl | jq ."
+        echo ""
+        echo "Files:"
+        echo "- Traffic logs: /opt/traffic/logs/traffic.jsonl"
+        echo "- CA certificate: /opt/traffic/certs/mitmproxy-ca-cert.pem"
+        echo "- Startup script: /opt/traffic/start-proxy.sh"
 
     - name: Cleanup
       run: rm -f startup-script.sh
