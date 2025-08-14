@@ -161,6 +161,9 @@ jobs:
         
         chmod +x /opt/traffic/cleanup-logs.sh
 
+        # Configure NODE_EXTRA_CA_CERTS for Claude CLI to trust mitmproxy CA
+        echo "export NODE_EXTRA_CA_CERTS=/opt/traffic/certs/mitmproxy-ca-cert.pem" >> /etc/profile
+        
         echo "Traffic VM setup completed successfully"
         
         # Auto-start traffic proxy on boot
