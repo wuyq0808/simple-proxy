@@ -100,8 +100,6 @@ jobs:
 
         chown traffic:traffic /opt/traffic/traffic_script.py
 
-        # Note: iptables rules will be set when starting mitmproxy
-
         # Create iptables setup script
         cat > /opt/traffic/setup-iptables.sh << 'IPTABLES_EOF'
         #!/bin/bash
@@ -139,20 +137,25 @@ jobs:
         
         chmod +x /opt/traffic/start-proxy.sh
 
-        # Create log rotation for traffic logs
-        cat > /etc/logrotate.d/traffic << 'LOGROTATE_EOF'
-        /opt/traffic/logs/traffic.jsonl {
-            daily
-            rotate 7
-            compress
-            delaycompress
-            missingok
-            notifempty
-            create 644 traffic traffic
-        }
-        LOGROTATE_EOF
+        # Create log cleanup script
+        cat > /opt/traffic/cleanup-logs.sh << 'CLEANUP_LOGS_EOF'
+        #!/bin/bash
+        echo "Clearing traffic logs..."
+        sudo -u traffic rm -f /opt/traffic/logs/traffic.jsonl
+        sudo -u traffic touch /opt/traffic/logs/traffic.jsonl
+        echo "Traffic logs cleared"
+        CLEANUP_LOGS_EOF
+        
+        chmod +x /opt/traffic/cleanup-logs.sh
 
         echo "Traffic VM setup completed successfully"
+        
+        # Auto-start traffic proxy on boot
+        echo "Setting up iptables and starting traffic proxy..."
+        /opt/traffic/setup-iptables.sh
+        nohup /opt/traffic/start-proxy.sh > /opt/traffic/logs/startup.log 2>&1 &
+        echo "Traffic proxy started automatically"
+        
         EOF
 
         chmod +x startup-script.sh
@@ -211,18 +214,18 @@ jobs:
         echo ""
         echo "Usage Instructions:"
         echo "1. SSH into the VM: ssh $USER@$EXTERNAL_IP"
-        echo "2. Setup iptables (once): /opt/traffic/setup-iptables.sh"
-        echo "3. Start traffic proxy: /opt/traffic/start-proxy.sh"
-        echo "4. In another terminal, make requests (transparently intercepted): curl http://example.com"
-        echo "5. View logs: tail -f /opt/traffic/logs/traffic.jsonl | jq ."
-        echo "6. Stop proxy: Press Ctrl+C, then run /opt/traffic/clear-iptables.sh to clear rules"
+        echo "2. Traffic proxy is already running! Make requests: curl http://example.com"
+        echo "3. View logs: tail -f /opt/traffic/logs/traffic.jsonl | jq ."
+        echo "4. Manual control: /opt/traffic/start-proxy.sh to restart, /opt/traffic/clear-iptables.sh to stop"
+        echo "5. Startup logs: tail -f /opt/traffic/logs/startup.log"
         echo ""
         echo "Files:"
         echo "- Traffic logs: /opt/traffic/logs/traffic.jsonl"
         echo "- CA certificate: /opt/traffic/certs/mitmproxy-ca-cert.pem"
         echo "- iptables setup: /opt/traffic/setup-iptables.sh"
-        echo "- Startup script: /opt/traffic/start-proxy.sh"
         echo "- Clear iptables: /opt/traffic/clear-iptables.sh"
+        echo "- Cleanup logs: /opt/traffic/cleanup-logs.sh"
+        echo "- Startup script: /opt/traffic/start-proxy.sh"
 
     - name: Cleanup
       run: rm -f startup-script.sh
