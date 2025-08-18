@@ -36,7 +36,7 @@ jobs:
         docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }} ./
         docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }}
 
-    - name: Deploy or Update Container Instance
+    - name: Create or Recreate Container Instance
       run: |-
         # Always delete existing instance if it exists
         if gcloud compute instances describe simple-proxy-cos --zone=us-central1-a >/dev/null 2>&1; then
